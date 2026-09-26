@@ -1,0 +1,124 @@
+You are taking over a local Windows project named ULTRON at:
+
+D:\ultron
+
+Act as a careful lead engineer. Inspect before changing anything. Preserve working components. Do not install/upgrade packages or download large models without explaining why, checking compatibility, and obtaining approval. Make one major change at a time, test it, report exact commands/results, then wait.
+
+User’s immediate objective:
+Create a reliable local custom wake word for either “Hey ULTRON” or bare “ULTRON.” Prefer “Hey ULTRON” for lower false activations; do not merely rename the existing “hey_jarvis” model. A separately trained ONNX model is required.
+
+Important constraints:
+- Windows 11, PowerShell, project root D:\ultron
+- RTX 3050 Laptop GPU, 4 GB VRAM; 16 GB RAM
+- Prioritize local, lightweight, modular, private execution.
+- No unrestricted shell tool for the LLM.
+- High-risk computer actions must never run silently.
+- Do not replace the working `hey_jarvis` detector until `ultron.onnx` has independently passed a microphone test.
+- Desired final model path: D:\ultron\voice\models\ultron.onnx
+- Training must be isolated from the existing Python 3.13 runtime because the old OpenWakeWord Colab workflow had Piper phonemizer / Torch / Torchaudio ABI problems.
+
+Current project layout:
+- D:\ultron\core\ultron.py
+- D:\ultron\core\tool_registry.py
+- D:\ultron\core\test_registry.py
+- D:\ultron\voice\wake_word.py
+- D:\ultron\voice\voice_controller.py
+- D:\ultron\voice\microphone.py
+- D:\ultron\voice\speech_to_text.py
+- D:\ultron\voice\text_to_speech.py
+- D:\ultron\memory\memory_manager.py
+- D:\ultron\memory\memory_tools.py
+- D:\ultron\tools\system_tools.py
+- D:\ultron\tools\app_tools.py
+- D:\ultron\tools\file_tools.py
+
+Current behavior:
+- core/ultron.py is a terminal assistant using Ollama `qwen2.5:7b`.
+- Tool registry has 16 tools: system/GPU/battery/temperature, app launch, URL opening, read-only files, and SQLite memory.
+- Voice mode is manual: microphone records a fixed 5-second WAV, Whisper Base transcribes, then Ollama responds; Piper/FFmpeg speech plays only in voice mode.
+- Wake word is standalone and not wired into the main voice loop.
+- Current wake word is `hey_jarvis`, 16 kHz mono signed 16-bit PCM, 1280-sample frames, NumPy arrays, ONNX inference, threshold 0.35.
+- Existing Piper voice: `en_US-norman-medium`.
+- FFmpeg paths:
+  D:\ffmpeg\bin\ffmpeg.exe
+  D:\ffmpeg\bin\ffplay.exe
+- Whisper cache includes base.pt.
+
+Changes already made in this session:
+1. D:\ultron\core\test_registry.py
+   - Replaced its nonexistent `list_tools` import.
+   - It imports `AVAILABLE_FUNCTIONS` and `TOOLS`.
+   - It validates that counts agree and each registered function is callable.
+   - Verified command:
+     Set-Location D:\ultron
+     .\.venv\Scripts\python.exe -m core.test_registry
+   - Result: passed, 16 tools registered.
+
+2. D:\ultron\voice\wake_word.py
+   - Changed:
+     openwakeword.utils.download_models()
+   - To:
+     openwakeword.utils.download_models(
+         model_names=[WAKE_WORD],
+     )
+   - Verified with a mocked no-download/no-microphone test; passed.
+   - `WAKE_WORD` is still exactly `hey_jarvis`. Do not change it to ULTRON until a real custom ONNX exists.
+
+Verified versions:
+- Python 3.13.15
+- Ollama Python client 0.6.2
+- Ollama local model qwen2.5:7b, 4.7 GB
+- OpenWakeWord 0.6.0
+- ONNX Runtime 1.29.0
+- OpenAI Whisper 20250625
+- Piper TTS 1.8.0
+- PyAudio 0.2.14
+- sounddevice 0.5.6
+- Torch 2.14.0
+- torchaudio is NOT installed
+- FFmpeg 9.0.1
+- No Git repository exists at D:\ultron.
+
+Additional verification:
+- `python -m compileall -q core memory tools voice` passed.
+- System tools detected NVIDIA GeForce RTX 3050 Laptop GPU, 4 GB VRAM.
+- OpenWakeWord built-in resources are already present under:
+  D:\ultron\.venv\Lib\site-packages\openwakeword\resources\models
+- Available built-in model identifiers include `hey_jarvis`, but none for ULTRON.
+- Do not state that an ULTRON model exists; it does not.
+
+Known project issues:
+- No permission layer; app launches and browser URL opens are currently callable by the LLM without confirmation.
+- Empty config and vision directories.
+- SQLite memory only has id/content/created_at; it lacks category/source/importance/confidence.
+- File reads/searches lack limits and are not sandboxed to a narrow scope.
+- `core/test_registry.py` must be run as a module from D:\ultron, as shown above.
+- `psutil` does not expose temperature sensors on this Windows setup.
+- Do not run interactive microphone, TTS playback, app-launch, or destructive tests unless the user specifically requests them.
+
+Wake-word research conclusion:
+- OpenWakeWord officially supports custom model training and can produce ONNX output.
+- It can train one binary detector for multiple phrases, but begin with only `hey ultron` for lower false-positive risk.
+- Do not use the old Colab notebook blindly: its modern dependency compatibility is known to be fragile.
+- A separate WSL/Linux Python 3.11/3.12 environment is the intended training environment; leave D:\ultron\.venv untouched.
+- The current official OpenWakeWord documentation is:
+  https://github.com/dscripka/openWakeWord/blob/main/README.md
+
+WSL status and caution:
+- `wsl --version` showed WSL 2.7.1, kernel 6.1.18.
+- `wsl --list --verbose` showed no installed distributions.
+- `Ubuntu`/`Ubuntu-24.04` was not registered at the last check.
+- Started commands:
+  wsl --install -d Ubuntu-24.04
+  wsl.exe --install --distribution Ubuntu-24.04 --web-download
+- Both produced no immediate output and installer-related wsl.exe processes were still visible. A wait command was interrupted by the user.
+- FIRST inspect:
+  wsl --list --verbose
+  Get-Process -Name wsl -ErrorAction SilentlyContinue
+- Do not retry installs blindly or kill processes without explaining the state to the user. If Ubuntu is still not registered and no installer is making progress, report this clearly and ask before attempting another installation path.
+
+Next recommended action:
+First resolve and verify the Ubuntu WSL distribution registration. Do not install training dependencies until:
+  wsl --list --verbose
+shows Ubuntu-24.04 with version 2.
+Then inspect its Python version and disk space. Only afterward propose the isolated custom OpenWakeWord training setup.

@@ -1,0 +1,222 @@
+from ollama import chat
+
+from core.tool_registry import AVAILABLE_FUNCTIONS, TOOLS
+from memory.memory_manager import initialize_database
+from voice.voice_controller import listen
+from voice.text_to_speech import speak
+
+MODEL = "qwen2.5:7b"
+
+
+SYSTEM_PROMPT = """
+You are ULTRON, a local AI assistant running on a Windows computer.
+
+Personality:
+- Intelligent
+- Calm
+- Precise
+- Helpful
+- Slightly futuristic
+
+You have access to these computer tools:
+
+SYSTEM:
+- get_system_info()
+- get_gpu_info()
+- get_battery_info()
+- get_temperature_info()
+
+APPLICATIONS:
+- open_application(name)
+
+FILES:
+- list_files(path)
+- search_files(query, path)
+- get_file_info(path)
+- read_text_file(path)
+
+MEMORY:
+- save_memory(content)
+  Stores useful information for future sessions.
+
+- search_memories(query)
+  Searches previously stored memories.
+
+- get_recent_memories(limit)
+  Retrieves recent memories.
+
+Memory rules:
+- Do not save every random conversation.
+- Save information that is clearly useful for future interactions.
+- Never claim to remember something unless it exists in memory.
+
+Important rules:
+
+- File tools are READ-ONLY.
+- Never modify, overwrite, rename, move, or delete files.
+- Use tools when real computer information is required.
+- Never invent file contents or system information.
+- Never claim an action occurred unless a tool actually returned a successful result.
+- Never execute arbitrary shell commands.
+- Only use the tools provided to you.
+MEMORY BEHAVIOR:
+
+Use remember(content) when the user provides a stable,
+useful fact that should be available in future sessions.
+
+Examples:
+- Preferences
+- Ongoing projects
+- Important configuration
+- Names or labels the user explicitly provides
+- Long-term goals
+
+BROWSER:
+- open_url(url)
+  Opens a validated HTTP or HTTPS URL in the default browser.
+
+Browser rules:
+- Only use open_url for valid HTTP/HTTPS URLs.
+- Never claim that a webpage was opened unless the tool returned success.
+
+Do not save:
+- Casual conversation
+- Temporary information
+- Sensitive information unless the user explicitly asks you to remember it.
+
+Use recall(query) when information from previous sessions is needed.
+
+Use recent_memories(limit) when recent context is useful.
+
+Never claim to remember something unless it was retrieved from memory
+or is present in the current conversation.
+"""
+
+
+def run_agent(user_input: str, messages: list) -> str:
+    messages.append(
+        {
+            "role": "user",
+            "content": user_input,
+        }
+    )
+
+    while True:
+        response = chat(
+            model=MODEL,
+            messages=messages,
+            tools=TOOLS,
+        )
+
+        messages.append(response.message)
+
+        if not response.message.tool_calls:
+            return response.message.content.strip()
+
+        for tool_call in response.message.tool_calls:
+            tool_name = tool_call.function.name
+            tool_arguments = tool_call.function.arguments
+
+            print(
+                f"\n[ULTRON TOOL] "
+                f"{tool_name}({tool_arguments})"
+            )
+
+            function = AVAILABLE_FUNCTIONS.get(tool_name)
+
+            if function is None:
+                result = f"Unknown tool: {tool_name}"
+
+            else:
+                try:
+                    result = function(**tool_arguments)
+                except Exception as exc:
+                    result = f"Tool error: {exc}"
+
+            print(f"[TOOL RESULT] {result}")
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_name": tool_name,
+                    "content": str(result),
+                }
+            )
+
+
+def main() -> None:
+    initialize_database()
+
+    print("=" * 60)
+    print("                    ULTRON")
+    print("             LOCAL AI CORE ONLINE")
+    print("=" * 60)
+    print()
+    print("Modes:")
+    print("  [T] Type a message")
+    print("  [V] Speak to ULTRON")
+    print("  [Q] Quit")
+    print()
+
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        }
+    ]
+
+    while True:
+        try:
+            mode = input("Mode [T/V/Q] > ").strip().lower()
+
+        except (KeyboardInterrupt, EOFError):
+            print("\nULTRON > Shutting down.")
+            break
+
+        if mode == "q":
+            print("ULTRON > Shutting down.")
+            break
+
+        if mode == "t":
+            user_input = input("\nYou > ").strip()
+
+            if not user_input:
+                continue
+
+        elif mode == "v":
+            try:
+                print("\nULTRON > Voice mode activated.")
+
+                user_input = listen()
+
+                if not user_input:
+                    print("ULTRON > I didn't hear anything.")
+                    continue
+
+                print(f"You > {user_input}")
+
+            except Exception as exc:
+                print(f"\nULTRON VOICE ERROR > {exc}\n")
+                continue
+
+        else:
+            print("ULTRON > Choose T, V, or Q.")
+            continue
+
+        try:
+            answer = run_agent(
+                user_input,
+                messages,
+            )
+
+            print(f"\nULTRON > {answer}\n")
+
+            # Speak the response when using voice mode.
+            if mode == "v":
+                speak(answer)
+
+        except Exception as exc:
+            print(f"\nULTRON ERROR > {exc}\n")
+
+if __name__ == "__main__":
+    main()
